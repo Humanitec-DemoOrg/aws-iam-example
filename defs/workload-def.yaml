@@ -1,0 +1,18 @@
+apiVersion: entity.humanitec.io/v1b1
+kind: Definition
+metadata:
+  id: aws-iam-example-workload
+entity:
+  criteria:
+  - app_id: aws-iam-example
+  driver_inputs:
+    values:
+      templates:
+        outputs: |
+          update:
+          - op: add
+            path: /spec/pod/serviceAccountName
+            value: ${resources.k8s-service-account.outputs.name}
+  driver_type: humanitec/template
+  name: aws-iam-example-workload
+  type: workload

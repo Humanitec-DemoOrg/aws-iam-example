@@ -1,0 +1,19 @@
+apiVersion: entity.humanitec.io/v1b1
+kind: Definition
+metadata:
+  id: aws-iam-example-s3-delegator-ro
+entity:
+  criteria:
+  - app_id: aws-iam-example
+    class: ro
+  driver_inputs:
+    values:
+      arn: ${resources['s3.concrete'].outputs.arn}
+      bucket: ${resources['s3.concrete'].outputs.bucket}
+      region: ${resources['s3.concrete'].outputs.region}
+  driver_type: humanitec/echo
+  name: aws-iam-example-s3-delegator-ro
+  provision:
+    aws-policy.s3-ro:
+      match_dependents: true
+  type: s3

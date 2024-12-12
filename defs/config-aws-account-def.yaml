@@ -1,0 +1,19 @@
+apiVersion: entity.humanitec.io/v1b1
+kind: Definition
+metadata:
+  id: aws-iam-example-config-aws-account
+entity:
+  criteria:
+  - app_id: aws-iam-example
+    res_id: aws-account
+
+  # UPDATE WITH THE CLOUD ACCOUNT FOR YOUR AWS ACCOUNT
+  driver_account: 
+
+  driver_inputs:
+    values:
+      # Use the region that the EKS cluster is configured with
+      region: ${resources['k8s-cluster.default#k8s-cluster'].outputs.region}
+  driver_type: humanitec/echo
+  name: aws-iam-example-config-aws-account
+  type: config

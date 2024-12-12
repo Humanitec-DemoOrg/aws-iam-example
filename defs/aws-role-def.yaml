@@ -1,0 +1,113 @@
+apiVersion: entity.humanitec.io/v1b1
+kind: Definition
+metadata:
+  id: aws-iam-example-aws-role
+entity:
+  criteria:
+  - app_id: aws-iam-example
+  driver_account: ${resources['config.default#aws-account'].account}
+  driver_inputs:
+    values:
+      credentials_config:
+        environment:
+          AWS_ACCESS_KEY_ID: "AccessKeyId"
+          AWS_SECRET_ACCESS_KEY: "SecretAccessKey"
+          AWS_SESSION_TOKEN: "SessionToken"
+      runner_mode: managed
+      variables:
+        region: ${resources['config.default#aws-account'].outputs.region}
+        res_id: ${context.res.id}
+        env_id: ${context.env.id}
+        app_id: ${context.app.id}
+
+        # The Globally Unique Resource ID (GUResID) is useful for ensuring uniqueness
+        guresid: ${context.res.guresid}
+
+        eks_cluster_name: ${resources["k8s-cluster.default#k8s-cluster"].outputs.name}
+        k8s_namespace: ${resources["k8s-namespace.default#k8s-namespace"].outputs.namespace}
+
+        # As the k8s-service-account co-provisions this aws-role, this does not introduce a cycle.
+        service_account_name: ${resources.k8s-service-account.outputs.name}
+
+        # Selector returns an array of arns of policies as follows:
+        # 1. Start at this aws-role
+        # 2. Find all the workloads that depend on this aws-role
+        # 3. Find all the aws-policies that these workloads depend on
+        # 4. For each aws-policy, output its arn.
+        # NOTES:
+        # - The workload depends on the aws-role because the k8s-service-account co-provisions with match_dependents = true
+        # - The workload depends on any aws policy because the s3 resource co-provisions with match_dependents = true
+        policy_arns: ${resources["aws-role<workload>aws-policy"].outputs.arn}
+
+      script: |
+        variable "region" {}
+        variable "res_id" {}
+        variable "env_id" {}
+        variable "app_id" {}
+        variable "guresid" {}
+        variable "eks_cluster_name" {}
+        variable "k8s_namespace" {}
+        variable "service_account_name" {}
+        variable "policy_arns" {}
+
+        locals {
+          # res_id will have the form: modules.<workload_name>
+          workload_name = split(".", var.res_id)[1]
+        }
+
+        terraform {
+          required_providers {
+            aws = {
+              source = "hashicorp/aws"
+            }
+          }
+        }
+
+        provider "aws" {
+          region = var.region
+        }
+
+        # See https://docs.aws.amazon.com/eks/latest/userguide/pod-id-association.html
+        data "aws_iam_policy_document" "trust_relationship" {
+          statement {
+            sid    = "PodIdentityTrust"
+            effect = "Allow"
+            principals {
+              type        = "Service"
+              identifiers = ["pods.eks.amazonaws.com"]
+            }
+            actions = [
+              "sts:AssumeRole",
+              "sts:TagSession"
+            ]
+          }
+        }
+
+        resource "aws_iam_role" "workload_role" {
+          # the guresid is unique to this resource instance and globally unique.
+          name               = var.guresid
+          description        = "IAM Role for workload $\{local.workload_name} in env $\{var.env_id} of app $\{var.app_id}"
+          assume_role_policy = data.aws_iam_policy_document.trust_relationship.json
+        }
+
+        resource "aws_eks_pod_identity_association" "workload_role_eks_pod_identity" {
+          cluster_name    = var.eks_cluster_name
+          namespace       = var.k8s_namespace
+          service_account = var.service_account_name
+          role_arn        = aws_iam_role.workload_role.arn
+        }
+
+        resource "aws_iam_role_policy_attachment" "workload_role_attached_policies" {
+          for_each = toset(var.policy_arns)
+
+          role       = aws_iam_role.workload_role.name
+          policy_arn = each.value
+        }
+
+        output "arn" {
+          value = aws_iam_role.workload_role.arn
+        }
+
+  driver_type: humanitec/terraform
+  name: aws-iam-example-aws-role
+  type: aws-role

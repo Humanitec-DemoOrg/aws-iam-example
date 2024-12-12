@@ -1,0 +1,25 @@
+apiVersion: score.dev/v1b1
+
+metadata:
+  name: workload-one
+
+containers:
+  busybox:
+    image: busybox:latest
+    command:
+      - /bin/sh
+      - "-c"
+      - |
+        while true
+        do
+          set
+          sleep 10
+        done
+    variables:
+      BUCKET: ${resources.bucket.bucket}
+
+resources:
+  bucket:
+    type: s3
+    class: ro
+    id: common-bucket
